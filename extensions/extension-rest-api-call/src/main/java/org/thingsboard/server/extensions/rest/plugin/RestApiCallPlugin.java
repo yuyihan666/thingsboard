@@ -34,16 +34,23 @@ public class RestApiCallPlugin extends AbstractPlugin<RestApiCallPluginConfigura
     private static final String AUTHORIZATION_HEADER_NAME = "Authorization";
     private static final String AUTHORIZATION_HEADER_FORMAT = "Basic %s";
     private static final String CREDENTIALS_TEMPLATE = "%s:%s";
-    private static final String BASE_URL_TEMPLATE = "http://%s:%d%s";
+    private static final String BASE_URL_TEMPLATE = "%s%s:%d%s";
     private RestApiCallMsgHandler handler;
     private String baseUrl;
     private HttpHeaders headers = new HttpHeaders();
 
     @Override
     public void init(RestApiCallPluginConfiguration configuration) {
+        String host = configuration.getHost();
+        host = host.trim();
+        if (host.contains("://")) {
+            host = host.substring(host.lastIndexOf('/') + 1, host.length());
+        }
+
         this.baseUrl = String.format(
                 BASE_URL_TEMPLATE,
-                configuration.getHost(),
+                configuration.getProtocol(),
+                host,
                 configuration.getPort(),
                 configuration.getBasePath());
 
@@ -53,6 +60,13 @@ public class RestApiCallPlugin extends AbstractPlugin<RestApiCallPluginConfigura
             String credentials = String.format(CREDENTIALS_TEMPLATE, userName, password);
             byte[] token = Base64.getEncoder().encode(credentials.getBytes());
             this.headers.add(AUTHORIZATION_HEADER_NAME, String.format(AUTHORIZATION_HEADER_FORMAT, new String(token)));
+        }
+
+        if (configuration.getHeaders() != null) {
+            configuration.getHeaders().forEach(h -> {
+                log.debug("Adding header to request object. Key = {}, Value = {}", h.getKey(), h.getValue());
+                this.headers.add(h.getKey(), h.getValue());
+            });
         }
 
         init();

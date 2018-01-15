@@ -77,6 +77,8 @@ class ASyncMsgProcessor extends AbstractSessionActorMsgProcessor {
             case UNSUBSCRIBE_RPC_COMMANDS_REQUEST:
                 subscribedToRpcCommands = false;
                 break;
+            default:
+                break;
         }
         currentTargetServer = forwardToAppActor(ctx, pendingMsg);
     }
@@ -94,6 +96,8 @@ class ASyncMsgProcessor extends AbstractSessionActorMsgProcessor {
                             pendingMap.remove(responseMsg.getRequestId());
                         }
                         break;
+                    default:
+                        break;
                 }
                 sessionCtx.onMsg(new BasicSessionActorToAdaptorMsg(this.sessionCtx, msg));
             } else {
@@ -109,6 +113,7 @@ class ASyncMsgProcessor extends AbstractSessionActorMsgProcessor {
         // TODO Auto-generated method stub        
     }
 
+    @Override
     protected void cleanupSession(ActorContext ctx) {
         toDeviceMsg(new SessionCloseMsg()).ifPresent(m -> forwardToAppActor(ctx, m));
     }
@@ -116,7 +121,7 @@ class ASyncMsgProcessor extends AbstractSessionActorMsgProcessor {
     @Override
     public void processClusterEvent(ActorContext context, ClusterEventMsg msg) {
         if (pendingMap.size() > 0 || subscribedToAttributeUpdates || subscribedToRpcCommands) {
-            Optional<ServerAddress> newTargetServer = systemContext.getRoutingService().resolve(getDeviceId());
+            Optional<ServerAddress> newTargetServer = systemContext.getRoutingService().resolveById(getDeviceId());
             if (!newTargetServer.equals(currentTargetServer)) {
                 firstMsg = true;
                 currentTargetServer = newTargetServer;

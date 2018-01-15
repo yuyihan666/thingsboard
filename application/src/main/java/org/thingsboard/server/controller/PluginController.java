@@ -25,7 +25,6 @@ import org.thingsboard.server.common.data.page.TextPageLink;
 import org.thingsboard.server.common.data.plugin.ComponentLifecycleEvent;
 import org.thingsboard.server.common.data.plugin.PluginMetaData;
 import org.thingsboard.server.common.data.security.Authority;
-import org.thingsboard.server.common.data.widget.WidgetsBundle;
 import org.thingsboard.server.dao.model.ModelConstants;
 import org.thingsboard.server.exception.ThingsboardException;
 
@@ -35,11 +34,13 @@ import java.util.List;
 @RequestMapping("/api")
 public class PluginController extends BaseController {
 
+    public static final String PLUGIN_ID = "pluginId";
+
     @PreAuthorize("hasAnyAuthority('SYS_ADMIN', 'TENANT_ADMIN')")
     @RequestMapping(value = "/plugin/{pluginId}", method = RequestMethod.GET)
     @ResponseBody
-    public PluginMetaData getPluginById(@PathVariable("pluginId") String strPluginId) throws ThingsboardException {
-        checkParameter("pluginId", strPluginId);
+    public PluginMetaData getPluginById(@PathVariable(PLUGIN_ID) String strPluginId) throws ThingsboardException {
+        checkParameter(PLUGIN_ID, strPluginId);
         try {
             PluginId pluginId = new PluginId(toUUID(strPluginId));
             return checkPlugin(pluginService.findPluginById(pluginId));
@@ -79,8 +80,8 @@ public class PluginController extends BaseController {
     @PreAuthorize("hasAnyAuthority('SYS_ADMIN', 'TENANT_ADMIN')")
     @RequestMapping(value = "/plugin/{pluginId}/activate", method = RequestMethod.POST)
     @ResponseStatus(value = HttpStatus.OK)
-    public void activatePluginById(@PathVariable("pluginId") String strPluginId) throws ThingsboardException {
-        checkParameter("pluginId", strPluginId);
+    public void activatePluginById(@PathVariable(PLUGIN_ID) String strPluginId) throws ThingsboardException {
+        checkParameter(PLUGIN_ID, strPluginId);
         try {
             PluginId pluginId = new PluginId(toUUID(strPluginId));
             PluginMetaData plugin = checkPlugin(pluginService.findPluginById(pluginId));
@@ -94,8 +95,8 @@ public class PluginController extends BaseController {
     @PreAuthorize("hasAnyAuthority('SYS_ADMIN', 'TENANT_ADMIN')")
     @RequestMapping(value = "/plugin/{pluginId}/suspend", method = RequestMethod.POST)
     @ResponseStatus(value = HttpStatus.OK)
-    public void suspendPluginById(@PathVariable("pluginId") String strPluginId) throws ThingsboardException {
-        checkParameter("pluginId", strPluginId);
+    public void suspendPluginById(@PathVariable(PLUGIN_ID) String strPluginId) throws ThingsboardException {
+        checkParameter(PLUGIN_ID, strPluginId);
         try {
             PluginId pluginId = new PluginId(toUUID(strPluginId));
             PluginMetaData plugin = checkPlugin(pluginService.findPluginById(pluginId));
@@ -181,8 +182,8 @@ public class PluginController extends BaseController {
     @PreAuthorize("hasAnyAuthority('SYS_ADMIN', 'TENANT_ADMIN')")
     @RequestMapping(value = "/plugin/{pluginId}", method = RequestMethod.DELETE)
     @ResponseStatus(value = HttpStatus.OK)
-    public void deletePlugin(@PathVariable("pluginId") String strPluginId) throws ThingsboardException {
-        checkParameter("pluginId", strPluginId);
+    public void deletePlugin(@PathVariable(PLUGIN_ID) String strPluginId) throws ThingsboardException {
+        checkParameter(PLUGIN_ID, strPluginId);
         try {
             PluginId pluginId = new PluginId(toUUID(strPluginId));
             PluginMetaData plugin = checkPlugin(pluginService.findPluginById(pluginId));

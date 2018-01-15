@@ -51,7 +51,7 @@ module.exports = {
         new HtmlWebpackPlugin({
             template: './src/index.html',
             filename: 'index.html',
-            title: 'Thingsboard',
+            title: 'ThingsBoard',
             inject: 'body',
         }),
         new webpack.optimize.OccurrenceOrderPlugin(),
@@ -60,6 +60,7 @@ module.exports = {
             allChunks: true,
         }),
         new webpack.DefinePlugin({
+            THINGSBOARD_VERSION: JSON.stringify(require('./package.json').version),
             '__DEVTOOLS__': false,
             'process.env': {
                 NODE_ENV: JSON.stringify('development'),

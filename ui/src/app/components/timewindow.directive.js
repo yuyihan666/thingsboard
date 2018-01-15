@@ -64,12 +64,12 @@ function Timewindow($compile, $templateCache, $filter, $mdPanel, $document, $mdM
 
         scope.historyOnly = angular.isDefined(attrs.historyOnly);
 
-        scope.aggregation = angular.isDefined(attrs.aggregation);
+        scope.aggregation = scope.$eval(attrs.aggregation);
 
         scope.isToolbar = angular.isDefined(attrs.isToolbar);
 
         scope.hideLabel = function() {
-            return scope.isToolbar && !$mdMedia('gt-sm');
+            return scope.isToolbar && !$mdMedia('gt-md');
         }
 
         var translationPending = false;

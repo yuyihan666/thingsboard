@@ -15,18 +15,18 @@
  */
 package org.thingsboard.server.common.data.rule;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Data;
-import lombok.ToString;
+import lombok.EqualsAndHashCode;
+import org.thingsboard.server.common.data.HasName;
 import org.thingsboard.server.common.data.SearchTextBased;
-import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.RuleId;
 import org.thingsboard.server.common.data.id.TenantId;
-
-import com.fasterxml.jackson.databind.JsonNode;
 import org.thingsboard.server.common.data.plugin.ComponentLifecycleState;
 
 @Data
-public class RuleMetaData extends SearchTextBased<RuleId> {
+@EqualsAndHashCode(callSuper = true)
+public class RuleMetaData extends SearchTextBased<RuleId> implements HasName {
 
     private static final long serialVersionUID = -5656679015122935465L;
 
@@ -35,10 +35,10 @@ public class RuleMetaData extends SearchTextBased<RuleId> {
     private ComponentLifecycleState state;
     private int weight;
     private String pluginToken;
-    private JsonNode filters;
-    private JsonNode processor;
-    private JsonNode action;
-    private JsonNode additionalInfo;
+    private transient JsonNode filters;
+    private transient JsonNode processor;
+    private transient JsonNode action;
+    private transient JsonNode additionalInfo;
 
     public RuleMetaData() {
         super();
@@ -63,6 +63,11 @@ public class RuleMetaData extends SearchTextBased<RuleId> {
 
     @Override
     public String getSearchText() {
+        return getName();
+    }
+
+    @Override
+    public String getName() {
         return name;
     }
 

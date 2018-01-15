@@ -15,11 +15,12 @@
  */
 package org.thingsboard.server.common.data;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DashboardId;
 import org.thingsboard.server.common.data.id.TenantId;
 
-public class DashboardInfo extends SearchTextBased<DashboardId> {
+public class DashboardInfo extends SearchTextBased<DashboardId> implements HasName {
 
     private TenantId tenantId;
     private CustomerId customerId;
@@ -65,8 +66,14 @@ public class DashboardInfo extends SearchTextBased<DashboardId> {
     }
 
     @Override
-    public String getSearchText() {
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    public String getName() {
         return title;
+    }
+
+    @Override
+    public String getSearchText() {
+        return getTitle();
     }
 
     @Override

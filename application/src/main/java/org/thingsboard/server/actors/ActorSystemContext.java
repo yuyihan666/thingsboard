@@ -37,11 +37,14 @@ import org.thingsboard.server.common.data.plugin.ComponentLifecycleEvent;
 import org.thingsboard.server.common.msg.cluster.ServerAddress;
 import org.thingsboard.server.common.transport.auth.DeviceAuthService;
 import org.thingsboard.server.controller.plugin.PluginWebSocketMsgEndpoint;
+import org.thingsboard.server.dao.alarm.AlarmService;
+import org.thingsboard.server.dao.asset.AssetService;
 import org.thingsboard.server.dao.attributes.AttributesService;
 import org.thingsboard.server.dao.customer.CustomerService;
 import org.thingsboard.server.dao.device.DeviceService;
 import org.thingsboard.server.dao.event.EventService;
 import org.thingsboard.server.dao.plugin.PluginService;
+import org.thingsboard.server.dao.relation.RelationService;
 import org.thingsboard.server.dao.rule.RuleService;
 import org.thingsboard.server.dao.tenant.TenantService;
 import org.thingsboard.server.dao.timeseries.TimeseriesService;
@@ -81,6 +84,9 @@ public class ActorSystemContext {
     @Getter private DeviceService deviceService;
 
     @Autowired
+    @Getter private AssetService assetService;
+
+    @Autowired
     @Getter private TenantService tenantService;
 
     @Autowired
@@ -100,6 +106,12 @@ public class ActorSystemContext {
 
     @Autowired
     @Getter private EventService eventService;
+
+    @Autowired
+    @Getter private AlarmService alarmService;
+
+    @Autowired
+    @Getter private RelationService relationService;
 
     @Autowired
     @Getter @Setter private PluginWebSocketMsgEndpoint wsMsgEndpoint;
@@ -127,6 +139,9 @@ public class ActorSystemContext {
 
     @Value("${actors.statistics.persist_frequency}")
     @Getter private long statisticsPersistFrequency;
+
+    @Value("${actors.tenant.create_components_on_init}")
+    @Getter private boolean tenantComponentsInitEnabled;
 
     @Getter @Setter private ActorSystem actorSystem;
 

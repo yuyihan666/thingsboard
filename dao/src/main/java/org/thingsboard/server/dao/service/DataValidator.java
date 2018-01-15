@@ -15,18 +15,15 @@
  */
 package org.thingsboard.server.dao.service;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Set;
-
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.validator.routines.EmailValidator;
 import org.thingsboard.server.common.data.BaseData;
 import org.thingsboard.server.dao.exception.DataValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 
 @Slf4j
 public abstract class DataValidator<D extends BaseData<?>> {
@@ -60,12 +57,7 @@ public abstract class DataValidator<D extends BaseData<?>> {
     }
     
     protected boolean isSameData(D existentData, D actualData) {
-        if (actualData.getId() == null) {
-            return false;
-        } else if (!existentData.getId().equals(actualData.getId())) {
-            return false;
-        }
-        return true;
+        return actualData.getId() != null && existentData.getId().equals(actualData.getId());
     }
     
     protected static void validateEmail(String email) {

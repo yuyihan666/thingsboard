@@ -27,7 +27,7 @@
         </md-toolbar>
         <md-dialog-content>
             <div class="md-dialog-content">
-                <div flex id="tb-content" readonly
+                <div flex id="tb-event-content" readonly
                      ui-ace="vm.contentOptions"
                      ng-model="vm.content">
                 </div>
@@ -35,7 +35,7 @@
         </md-dialog-content>
         <md-dialog-actions layout="row">
             <span flex></span>
-            <md-button ng-disabled="loading" ng-click="vm.close()" style="margin-right:20px;">{{ 'action.close' |
+            <md-button ng-disabled="$root.loading" ng-click="vm.close()" style="margin-right:20px;">{{ 'action.close' |
                 translate }}
             </md-button>
         </md-dialog-actions>

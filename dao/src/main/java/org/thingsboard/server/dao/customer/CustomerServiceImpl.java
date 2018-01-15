@@ -15,95 +15,114 @@
  */
 package org.thingsboard.server.dao.customer;
 
-import static org.thingsboard.server.dao.DaoUtil.convertDataList;
-import static org.thingsboard.server.dao.DaoUtil.getData;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.util.concurrent.ListenableFuture;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.thingsboard.server.common.data.Customer;
+import org.thingsboard.server.common.data.Tenant;
+import org.thingsboard.server.common.data.id.CustomerId;
+import org.thingsboard.server.common.data.id.TenantId;
+import org.thingsboard.server.common.data.page.TextPageData;
+import org.thingsboard.server.common.data.page.TextPageLink;
+import org.thingsboard.server.dao.asset.AssetService;
+import org.thingsboard.server.dao.dashboard.DashboardService;
+import org.thingsboard.server.dao.device.DeviceService;
+import org.thingsboard.server.dao.entity.AbstractEntityService;
+import org.thingsboard.server.dao.exception.DataValidationException;
+import org.thingsboard.server.dao.exception.IncorrectParameterException;
+import org.thingsboard.server.dao.service.DataValidator;
+import org.thingsboard.server.dao.service.PaginatedRemover;
+import org.thingsboard.server.dao.service.Validator;
+import org.thingsboard.server.dao.tenant.TenantDao;
+import org.thingsboard.server.dao.user.UserService;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
-import org.thingsboard.server.common.data.Customer;
-import org.thingsboard.server.common.data.id.CustomerId;
-import org.thingsboard.server.common.data.id.TenantId;
-import org.thingsboard.server.common.data.page.TextPageData;
-import org.thingsboard.server.common.data.page.TextPageLink;
-import org.thingsboard.server.dao.dashboard.DashboardService;
-import org.thingsboard.server.dao.device.DeviceService;
-import org.thingsboard.server.dao.exception.DataValidationException;
-import org.thingsboard.server.dao.exception.IncorrectParameterException;
-import org.thingsboard.server.dao.model.CustomerEntity;
-import org.thingsboard.server.dao.model.TenantEntity;
-import org.thingsboard.server.dao.service.DataValidator;
-import org.thingsboard.server.dao.service.PaginatedRemover;
-import org.thingsboard.server.dao.tenant.TenantDao;
-import org.thingsboard.server.dao.user.UserService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.thingsboard.server.dao.service.Validator;
+import static org.thingsboard.server.dao.service.Validator.validateId;
+
 @Service
 @Slf4j
-public class CustomerServiceImpl implements CustomerService {
+public class CustomerServiceImpl extends AbstractEntityService implements CustomerService {
 
     private static final String PUBLIC_CUSTOMER_TITLE = "Public";
+    public static final String INCORRECT_CUSTOMER_ID = "Incorrect customerId ";
+    public static final String INCORRECT_TENANT_ID = "Incorrect tenantId ";
 
     @Autowired
     private CustomerDao customerDao;
-    
+
     @Autowired
     private UserService userService;
-    
+
     @Autowired
     private TenantDao tenantDao;
-    
+
+    @Autowired
+    private AssetService assetService;
+
     @Autowired
     private DeviceService deviceService;
-    
+
     @Autowired
     private DashboardService dashboardService;
-    
+
     @Override
     public Customer findCustomerById(CustomerId customerId) {
         log.trace("Executing findCustomerById [{}]", customerId);
-        Validator.validateId(customerId, "Incorrect customerId " + customerId);
-        CustomerEntity customerEntity = customerDao.findById(customerId.getId());
-        return getData(customerEntity);
+        Validator.validateId(customerId, INCORRECT_CUSTOMER_ID + customerId);
+        return customerDao.findById(customerId.getId());
+    }
+
+    @Override
+    public Optional<Customer> findCustomerByTenantIdAndTitle(TenantId tenantId, String title) {
+        log.trace("Executing findCustomerByTenantIdAndTitle [{}] [{}]", tenantId, title);
+        validateId(tenantId, INCORRECT_TENANT_ID + tenantId);
+        return customerDao.findCustomersByTenantIdAndTitle(tenantId.getId(), title);
+    }
+
+    @Override
+    public ListenableFuture<Customer> findCustomerByIdAsync(CustomerId customerId) {
+        log.trace("Executing findCustomerByIdAsync [{}]", customerId);
+        validateId(customerId, INCORRECT_CUSTOMER_ID + customerId);
+        return customerDao.findByIdAsync(customerId.getId());
     }
 
     @Override
     public Customer saveCustomer(Customer customer) {
         log.trace("Executing saveCustomer [{}]", customer);
         customerValidator.validate(customer);
-        CustomerEntity customerEntity = customerDao.save(customer);
-        return getData(customerEntity);
+        return customerDao.save(customer);
     }
 
     @Override
     public void deleteCustomer(CustomerId customerId) {
         log.trace("Executing deleteCustomer [{}]", customerId);
-        Validator.validateId(customerId, "Incorrect customerId " + customerId);
+        Validator.validateId(customerId, INCORRECT_CUSTOMER_ID + customerId);
         Customer customer = findCustomerById(customerId);
         if (customer == null) {
             throw new IncorrectParameterException("Unable to delete non-existent customer.");
         }
         dashboardService.unassignCustomerDashboards(customer.getTenantId(), customerId);
+        assetService.unassignCustomerAssets(customer.getTenantId(), customerId);
         deviceService.unassignCustomerDevices(customer.getTenantId(), customerId);
-        userService.deleteCustomerUsers(customer.getTenantId(), customerId);               
+        userService.deleteCustomerUsers(customer.getTenantId(), customerId);
+        deleteEntityRelations(customerId);
         customerDao.removeById(customerId.getId());
     }
 
     @Override
     public Customer findOrCreatePublicCustomer(TenantId tenantId) {
         log.trace("Executing findOrCreatePublicCustomer, tenantId [{}]", tenantId);
-        Validator.validateId(tenantId, "Incorrect customerId " + tenantId);
-        Optional<CustomerEntity> publicCustomerEntity = customerDao.findCustomersByTenantIdAndTitle(tenantId.getId(), PUBLIC_CUSTOMER_TITLE);
-        if (publicCustomerEntity.isPresent()) {
-            return getData(publicCustomerEntity.get());
+        Validator.validateId(tenantId, INCORRECT_CUSTOMER_ID + tenantId);
+        Optional<Customer> publicCustomerOpt = customerDao.findCustomersByTenantIdAndTitle(tenantId.getId(), PUBLIC_CUSTOMER_TITLE);
+        if (publicCustomerOpt.isPresent()) {
+            return publicCustomerOpt.get();
         } else {
             Customer publicCustomer = new Customer();
             publicCustomer.setTenantId(tenantId);
@@ -113,8 +132,7 @@ public class CustomerServiceImpl implements CustomerService {
             } catch (IOException e) {
                 throw new IncorrectParameterException("Unable to create public customer.", e);
             }
-            CustomerEntity customerEntity = customerDao.save(publicCustomer);
-            return getData(customerEntity);
+            return customerDao.save(publicCustomer);
         }
     }
 
@@ -123,18 +141,17 @@ public class CustomerServiceImpl implements CustomerService {
         log.trace("Executing findCustomersByTenantId, tenantId [{}], pageLink [{}]", tenantId, pageLink);
         Validator.validateId(tenantId, "Incorrect tenantId " + tenantId);
         Validator.validatePageLink(pageLink, "Incorrect page link " + pageLink);
-        List<CustomerEntity> customerEntities = customerDao.findCustomersByTenantId(tenantId.getId(), pageLink);
-        List<Customer> customers = convertDataList(customerEntities);
-        return new TextPageData<Customer>(customers, pageLink);
+        List<Customer> customers = customerDao.findCustomersByTenantId(tenantId.getId(), pageLink);
+        return new TextPageData<>(customers, pageLink);
     }
 
     @Override
     public void deleteCustomersByTenantId(TenantId tenantId) {
         log.trace("Executing deleteCustomersByTenantId, tenantId [{}]", tenantId);
         Validator.validateId(tenantId, "Incorrect tenantId " + tenantId);
-        customersByTenantRemover.removeEntitites(tenantId);
+        customersByTenantRemover.removeEntities(tenantId);
     }
-    
+
     private DataValidator<Customer> customerValidator =
             new DataValidator<Customer>() {
 
@@ -151,7 +168,7 @@ public class CustomerServiceImpl implements CustomerService {
                 protected void validateUpdate(Customer customer) {
                     customerDao.findCustomersByTenantIdAndTitle(customer.getTenantId().getId(), customer.getTitle()).ifPresent(
                             c -> {
-                                if (!c.getId().equals(customer.getUuidId())) {
+                                if (!c.getId().equals(customer.getId())) {
                                     throw new DataValidationException("Customer with such title already exists!");
                                 }
                             }
@@ -172,25 +189,25 @@ public class CustomerServiceImpl implements CustomerService {
                     if (customer.getTenantId() == null) {
                         throw new DataValidationException("Customer should be assigned to tenant!");
                     } else {
-                        TenantEntity tenant = tenantDao.findById(customer.getTenantId().getId());
+                        Tenant tenant = tenantDao.findById(customer.getTenantId().getId());
                         if (tenant == null) {
                             throw new DataValidationException("Customer is referencing to non-existent tenant!");
                         }
                     }
                 }
-    };
+            };
 
-    private PaginatedRemover<TenantId, CustomerEntity> customersByTenantRemover =
-            new PaginatedRemover<TenantId, CustomerEntity>() {
-        
-        @Override
-        protected List<CustomerEntity> findEntities(TenantId id, TextPageLink pageLink) {
-            return customerDao.findCustomersByTenantId(id.getId(), pageLink);
-        }
+    private PaginatedRemover<TenantId, Customer> customersByTenantRemover =
+            new PaginatedRemover<TenantId, Customer>() {
 
-        @Override
-        protected void removeEntity(CustomerEntity entity) {
-            deleteCustomer(new CustomerId(entity.getId()));
-        }
-    };
+                @Override
+                protected List<Customer> findEntities(TenantId id, TextPageLink pageLink) {
+                    return customerDao.findCustomersByTenantId(id.getId(), pageLink);
+                }
+
+                @Override
+                protected void removeEntity(Customer entity) {
+                    deleteCustomer(new CustomerId(entity.getUuidId()));
+                }
+            };
 }

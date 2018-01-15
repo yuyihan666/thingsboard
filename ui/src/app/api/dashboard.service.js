@@ -17,13 +17,22 @@ export default angular.module('thingsboard.api.dashboard', [])
     .factory('dashboardService', DashboardService).name;
 
 /*@ngInject*/
-function DashboardService($http, $q, $location, customerService) {
+function DashboardService($rootScope, $http, $q, $location, customerService) {
+
+    var stDiffPromise;
+
+    $rootScope.dadshboardServiceStateChangeStartHandle = $rootScope.$on('$stateChangeStart', function () {
+        stDiffPromise = undefined;
+    });
+
 
     var service = {
         assignDashboardToCustomer: assignDashboardToCustomer,
         getCustomerDashboards: getCustomerDashboards,
         getServerTimeDiff: getServerTimeDiff,
         getDashboard: getDashboard,
+        getDashboardInfo: getDashboardInfo,
+        getTenantDashboardsByTenantId: getTenantDashboardsByTenantId,
         getTenantDashboards: getTenantDashboards,
         deleteDashboard: deleteDashboard,
         saveDashboard: saveDashboard,
@@ -34,7 +43,27 @@ function DashboardService($http, $q, $location, customerService) {
 
     return service;
 
-    function getTenantDashboards(pageLink) {
+    function getTenantDashboardsByTenantId(tenantId, pageLink, config) {
+        var deferred = $q.defer();
+        var url = '/api/tenant/' + tenantId + '/dashboards?limit=' + pageLink.limit;
+        if (angular.isDefined(pageLink.textSearch)) {
+            url += '&textSearch=' + pageLink.textSearch;
+        }
+        if (angular.isDefined(pageLink.idOffset)) {
+            url += '&idOffset=' + pageLink.idOffset;
+        }
+        if (angular.isDefined(pageLink.textOffset)) {
+            url += '&textOffset=' + pageLink.textOffset;
+        }
+        $http.get(url, config).then(function success(response) {
+            deferred.resolve(response.data);
+        }, function fail() {
+            deferred.reject();
+        });
+        return deferred.promise;
+    }
+
+    function getTenantDashboards(pageLink, applyCustomersInfo, config) {
         var deferred = $q.defer();
         var url = '/api/tenant/dashboards?limit=' + pageLink.limit;
         if (angular.isDefined(pageLink.textSearch)) {
@@ -46,23 +75,27 @@ function DashboardService($http, $q, $location, customerService) {
         if (angular.isDefined(pageLink.textOffset)) {
             url += '&textOffset=' + pageLink.textOffset;
         }
-        $http.get(url, null).then(function success(response) {
-            customerService.applyAssignedCustomersInfo(response.data.data).then(
-                function success(data) {
-                    response.data.data = data;
-                    deferred.resolve(response.data);
-                },
-                function fail() {
-                    deferred.reject();
-                }
-            );
+        $http.get(url, config).then(function success(response) {
+            if (applyCustomersInfo) {
+                customerService.applyAssignedCustomersInfo(response.data.data).then(
+                    function success(data) {
+                        response.data.data = data;
+                        deferred.resolve(response.data);
+                    },
+                    function fail() {
+                        deferred.reject();
+                    }
+                );
+            } else {
+                deferred.resolve(response.data);
+            }
         }, function fail() {
             deferred.reject();
         });
         return deferred.promise;
     }
 
-    function getCustomerDashboards(customerId, pageLink) {
+    function getCustomerDashboards(customerId, pageLink, applyCustomersInfo, config) {
         var deferred = $q.defer();
         var url = '/api/customer/' + customerId + '/dashboards?limit=' + pageLink.limit;
         if (angular.isDefined(pageLink.textSearch)) {
@@ -74,16 +107,20 @@ function DashboardService($http, $q, $location, customerService) {
         if (angular.isDefined(pageLink.textOffset)) {
             url += '&textOffset=' + pageLink.textOffset;
         }
-        $http.get(url, null).then(function success(response) {
-            customerService.applyAssignedCustomerInfo(response.data.data, customerId).then(
-                function success(data) {
-                    response.data.data = data;
-                    deferred.resolve(response.data);
-                },
-                function fail() {
-                    deferred.reject();
-                }
-            );
+        $http.get(url, config).then(function success(response) {
+            if (applyCustomersInfo) {
+                customerService.applyAssignedCustomerInfo(response.data.data, customerId).then(
+                    function success(data) {
+                        response.data.data = data;
+                        deferred.resolve(response.data);
+                    },
+                    function fail() {
+                        deferred.reject();
+                    }
+                );
+            } else {
+                deferred.resolve(response.data);
+            }
         }, function fail() {
             deferred.reject();
         });
@@ -91,24 +128,40 @@ function DashboardService($http, $q, $location, customerService) {
     }
 
     function getServerTimeDiff() {
-        var deferred = $q.defer();
-        var url = '/api/dashboard/serverTime';
-        var ct1 = Date.now();
-        $http.get(url, null).then(function success(response) {
-            var ct2 = Date.now();
-            var st = response.data;
-            var stDiff = Math.ceil(st - (ct1+ct2)/2);
-            deferred.resolve(stDiff);
-        }, function fail() {
-            deferred.reject();
-        });
-        return deferred.promise;
+        if (stDiffPromise) {
+            return stDiffPromise;
+        } else {
+            var deferred = $q.defer();
+            stDiffPromise = deferred.promise;
+            var url = '/api/dashboard/serverTime';
+            var ct1 = Date.now();
+            $http.get(url, {ignoreLoading: true}).then(function success(response) {
+                var ct2 = Date.now();
+                var st = response.data;
+                var stDiff = Math.ceil(st - (ct1 + ct2) / 2);
+                deferred.resolve(stDiff);
+            }, function fail() {
+                deferred.reject();
+            });
+        }
+        return stDiffPromise;
     }
 
     function getDashboard(dashboardId) {
         var deferred = $q.defer();
         var url = '/api/dashboard/' + dashboardId;
         $http.get(url, null).then(function success(response) {
+            deferred.resolve(response.data);
+        }, function fail() {
+            deferred.reject();
+        });
+        return deferred.promise;
+    }
+
+    function getDashboardInfo(dashboardId, config) {
+        var deferred = $q.defer();
+        var url = '/api/dashboard/info/' + dashboardId;
+        $http.get(url, config).then(function success(response) {
             deferred.resolve(response.data);
         }, function fail() {
             deferred.reject();

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+ 
 import $ from 'jquery';
 import tinycolor from 'tinycolor2';
 import moment from 'moment';
@@ -55,7 +55,7 @@ export default class TbFlot {
 
         var tbFlot = this;
 
-        function seriesInfoDiv(label, color, value, units, trackDecimals, active, percent) {
+        function seriesInfoDiv(label, color, value, units, trackDecimals, active, percent, valueFormatFunction) {
             var divElement = $('<div></div>');
             divElement.css({
                 display: "flex",
@@ -83,7 +83,12 @@ export default class TbFlot {
                 });
             }
             divElement.append(labelSpan);
-            var valueContent = tbFlot.ctx.utils.formatValue(value, trackDecimals, units);
+            var valueContent;
+            if (valueFormatFunction) {
+                valueContent = valueFormatFunction(value);
+            } else {
+                valueContent = tbFlot.ctx.utils.formatValue(value, trackDecimals, units);
+            }
             if (angular.isNumber(percent)) {
                 valueContent += ' (' + Math.round(percent) + ' %)';
             }
@@ -102,10 +107,20 @@ export default class TbFlot {
             return divElement;
         }
 
+        function seriesInfoDivFromInfo(seriesHoverInfo, seriesIndex) {
+            var units = seriesHoverInfo.units && seriesHoverInfo.units.length ? seriesHoverInfo.units : tbFlot.ctx.trackUnits;
+            var decimals = angular.isDefined(seriesHoverInfo.decimals) ? seriesHoverInfo.decimals : tbFlot.ctx.trackDecimals;
+            var divElement = seriesInfoDiv(seriesHoverInfo.label, seriesHoverInfo.color,
+                seriesHoverInfo.value, units, decimals, seriesHoverInfo.index === seriesIndex, null, seriesHoverInfo.tooltipValueFormatFunction);
+            return divElement.prop('outerHTML');
+        }
+
         if (this.chartType === 'pie') {
             ctx.tooltipFormatter = function(item) {
+                var units = item.series.dataKey.units && item.series.dataKey.units.length ? item.series.dataKey.units : tbFlot.ctx.trackUnits;
+                var decimals = angular.isDefined(item.series.dataKey.decimals) ? item.series.dataKey.decimals : tbFlot.ctx.trackDecimals;
                 var divElement = seriesInfoDiv(item.series.dataKey.label, item.series.dataKey.color,
-                    item.datapoint[1][0][1], tbFlot.ctx.trackUnits, tbFlot.ctx.trackDecimals, true, item.series.percent);
+                    item.datapoint[1][0][1], units, decimals, true, item.series.percent, item.series.dataKey.tooltipValueFormatFunction);
                 return divElement.prop('outerHTML');
             };
         } else {
@@ -122,23 +137,50 @@ export default class TbFlot {
                     fontWeight: "700"
                 });
                 content += dateDiv.prop('outerHTML');
-                for (var i = 0; i < hoverInfo.seriesHover.length; i++) {
-                    var seriesHoverInfo = hoverInfo.seriesHover[i];
-                    if (tbFlot.ctx.tooltipIndividual && seriesHoverInfo.index !== seriesIndex) {
-                        continue;
+                if (tbFlot.ctx.tooltipIndividual) {
+                    var seriesHoverInfo = hoverInfo.seriesHover[seriesIndex];
+                    if (seriesHoverInfo) {
+                        content += seriesInfoDivFromInfo(seriesHoverInfo, seriesIndex);
                     }
-                    var divElement = seriesInfoDiv(seriesHoverInfo.label, seriesHoverInfo.color,
-                        seriesHoverInfo.value, tbFlot.ctx.trackUnits, tbFlot.ctx.trackDecimals, seriesHoverInfo.index === seriesIndex);
-                    content += divElement.prop('outerHTML');
+                } else {
+                    var seriesDiv = $('<div></div>');
+                    seriesDiv.css({
+                        display: "flex",
+                        flexDirection: "row"
+                    });
+                    const maxRows = 15;
+                    var columns = Math.ceil(hoverInfo.seriesHover.length / maxRows);
+                    var columnsContent = '';
+                    for (var c = 0; c < columns; c++) {
+                        var columnDiv = $('<div></div>');
+                        columnDiv.css({
+                            display: "flex",
+                            flexDirection: "column"
+                        });
+                        var columnContent = '';
+                        for (var i = c*maxRows; i < (c+1)*maxRows; i++) {
+                            if (i == hoverInfo.seriesHover.length) {
+                                break;
+                            }
+                            seriesHoverInfo = hoverInfo.seriesHover[i];
+                            columnContent += seriesInfoDivFromInfo(seriesHoverInfo, seriesIndex);
+                        }
+                        columnDiv.html(columnContent);
+                        if (c > 0) {
+                            columnsContent += '<span style="width: 20px;"></span>';
+                        }
+                        columnsContent += columnDiv.prop('outerHTML');
+                    }
+                    seriesDiv.html(columnsContent);
+                    content += seriesDiv.prop('outerHTML');
                 }
                 return content;
             };
         }
 
-        ctx.trackDecimals = angular.isDefined(settings.decimals) ?
-            settings.decimals : ctx.decimals;
+        ctx.trackDecimals = ctx.decimals;
 
-        ctx.trackUnits = angular.isDefined(settings.units) ? settings.units : ctx.units;
+        ctx.trackUnits = ctx.units;
 
         ctx.tooltipIndividual = this.chartType === 'pie' || (angular.isDefined(settings.tooltipIndividual) ? settings.tooltipIndividual : false);
         ctx.tooltipCumulative = angular.isDefined(settings.tooltipCumulative) ? settings.tooltipCumulative : false;
@@ -152,7 +194,7 @@ export default class TbFlot {
         var options = {
             title: null,
             subtitle: null,
-            shadowSize: settings.shadowSize || 4,
+            shadowSize: angular.isDefined(settings.shadowSize) ? settings.shadowSize : 4,
             HtmlText: false,
             grid: {
                 hoverable: true,
@@ -165,14 +207,14 @@ export default class TbFlot {
             }
         };
 
-        if (this.chartType === 'line' || this.chartType === 'bar') {
+        if (this.chartType === 'line' || this.chartType === 'bar' || this.chartType === 'state') {
             options.xaxis = {
                 mode: 'time',
                 timezone: 'browser',
                 font: angular.copy(font),
                 labelFont: angular.copy(font)
             };
-            options.yaxis = {
+            this.yaxis = {
                 font: angular.copy(font),
                 labelFont: angular.copy(font)
             };
@@ -188,32 +230,45 @@ export default class TbFlot {
                 options.xaxis.labelFont.size = options.xaxis.font.size+2;
                 options.xaxis.labelFont.weight = "bold";
             }
-            if (settings.yaxis) {
-                if (settings.yaxis.showLabels === false) {
-                    options.yaxis.tickFormatter = function() {
-                        return '';
-                    };
-                } else if (ctx.trackUnits && ctx.trackUnits.length > 0) {
-                    options.yaxis.tickFormatter = function(value, axis) {
-                        var factor = axis.tickDecimals ? Math.pow(10, axis.tickDecimals) : 1,
-                            formatted = "" + Math.round(value * factor) / factor;
-                        if (axis.tickDecimals != null) {
-                            var decimal = formatted.indexOf("."),
-                                precision = decimal === -1 ? 0 : formatted.length - decimal - 1;
 
-                            if (precision < axis.tickDecimals) {
-                                formatted = (precision ? formatted : formatted + ".") + ("" + factor).substr(1, axis.tickDecimals - precision);
-                            }
-                        }
-                        formatted += ' ' + tbFlot.ctx.trackUnits;
-                        return formatted;
-                    };
+            ctx.yAxisTickFormatter = function(value/*, axis*/) {
+                if (settings.yaxis && settings.yaxis.showLabels === false) {
+                    return '';
                 }
-                options.yaxis.font.color = settings.yaxis.color || options.yaxis.font.color;
-                options.yaxis.label = settings.yaxis.title || null;
-                options.yaxis.labelFont.color = options.yaxis.font.color;
-                options.yaxis.labelFont.size = options.yaxis.font.size+2;
-                options.yaxis.labelFont.weight = "bold";
+                if (this.ticksFormatterFunction) {
+                    return this.ticksFormatterFunction(value);
+                }
+                var factor = this.tickDecimals ? Math.pow(10, this.tickDecimals) : 1,
+                    formatted = "" + Math.round(value * factor) / factor;
+                if (this.tickDecimals != null) {
+                    var decimal = formatted.indexOf("."),
+                        precision = decimal === -1 ? 0 : formatted.length - decimal - 1;
+
+                    if (precision < this.tickDecimals) {
+                        formatted = (precision ? formatted : formatted + ".") + ("" + factor).substr(1, this.tickDecimals - precision);
+                    }
+                }
+                formatted += ' ' + this.tickUnits;
+                return formatted;
+            }
+
+            this.yaxis.tickFormatter = ctx.yAxisTickFormatter;
+
+            if (settings.yaxis) {
+                this.yaxis.font.color = settings.yaxis.color || this.yaxis.font.color;
+                this.yaxis.min = angular.isDefined(settings.yaxis.min) ? settings.yaxis.min : null;
+                this.yaxis.max = angular.isDefined(settings.yaxis.max) ? settings.yaxis.max : null;
+                this.yaxis.label = settings.yaxis.title || null;
+                this.yaxis.labelFont.color = this.yaxis.font.color;
+                this.yaxis.labelFont.size = this.yaxis.font.size+2;
+                this.yaxis.labelFont.weight = "bold";
+                if (settings.yaxis.ticksFormatter && settings.yaxis.ticksFormatter.length) {
+                    try {
+                        this.yaxis.ticksFormatterFunction = new Function('value', settings.yaxis.ticksFormatter);
+                    } catch (e) {
+                        this.yaxis.ticksFormatterFunction = null;
+                    }
+                }
             }
 
             options.grid.borderWidth = 1;
@@ -229,7 +284,13 @@ export default class TbFlot {
                     options.xaxis.tickLength = 0;
                 }
                 if (settings.grid.horizontalLines === false) {
-                    options.yaxis.tickLength = 0;
+                    this.yaxis.tickLength = 0;
+                }
+                if (angular.isDefined(settings.grid.margin)) {
+                    options.grid.margin = settings.grid.margin;
+                }
+                if (angular.isDefined(settings.grid.minBorderMargin)) {
+                    options.grid.minBorderMargin = settings.grid.minBorderMargin;
                 }
             }
 
@@ -260,6 +321,14 @@ export default class TbFlot {
                         fill: 0.9
                 }
             }
+
+            if (this.chartType === 'state') {
+                options.series.lines = {
+                    steps: true,
+                    show: true
+                }
+            }
+
         } else if (this.chartType === 'pie') {
             options.series = {
                 pie: {
@@ -311,15 +380,38 @@ export default class TbFlot {
         this.subscription = subscription;
         this.$element = $element;
         var colors = [];
+        this.yaxes = [];
+        var yaxesMap = {};
+
+        var tooltipValueFormatFunction = null;
+        if (this.ctx.settings.tooltipValueFormatter && this.ctx.settings.tooltipValueFormatter.length) {
+            try {
+                tooltipValueFormatFunction = new Function('value', this.ctx.settings.tooltipValueFormatter);
+            } catch (e) {
+                tooltipValueFormatFunction = null;
+            }
+        }
+
         for (var i = 0; i < this.subscription.data.length; i++) {
             var series = this.subscription.data[i];
             colors.push(series.dataKey.color);
             var keySettings = series.dataKey.settings;
-
+            series.dataKey.tooltipValueFormatFunction = tooltipValueFormatFunction;
+            if (keySettings.tooltipValueFormatter && keySettings.tooltipValueFormatter.length) {
+                try {
+                    series.dataKey.tooltipValueFormatFunction = new Function('value', keySettings.tooltipValueFormatter);
+                } catch (e) {
+                    series.dataKey.tooltipValueFormatFunction = tooltipValueFormatFunction;
+                }
+            }
             series.lines = {
                 fill: keySettings.fillLines === true,
                 show: this.chartType === 'line' ? keySettings.showLines !== false : keySettings.showLines === true
             };
+
+            if (angular.isDefined(keySettings.lineWidth)) {
+                series.lines.lineWidth = keySettings.lineWidth;
+            }
 
             series.points = {
                 show: false,
@@ -342,9 +434,30 @@ export default class TbFlot {
 
             series.highlightColor = lineColor.toRgbString();
 
+            if (this.yaxis) {
+                var units = series.dataKey.units && series.dataKey.units.length ? series.dataKey.units : this.ctx.trackUnits;
+                var yaxis;
+                if (keySettings.showSeparateAxis) {
+                    yaxis = this.createYAxis(keySettings, units);
+                    this.yaxes.push(yaxis);
+                } else {
+                    yaxis = yaxesMap[units];
+                    if (!yaxis) {
+                        yaxis = this.createYAxis(keySettings, units);
+                        yaxesMap[units] = yaxis;
+                        this.yaxes.push(yaxis);
+                    }
+                }
+                series.yaxisIndex = this.yaxes.indexOf(yaxis);
+                series.yaxis = series.yaxisIndex+1;
+                yaxis.keysInfo[i] = {hidden: false};
+                yaxis.hidden = false;
+            }
         }
+
         this.options.colors = colors;
-        if (this.chartType === 'line' || this.chartType === 'bar') {
+        this.options.yaxes = angular.copy(this.yaxes);
+        if (this.chartType === 'line' || this.chartType === 'bar' || this.chartType === 'state') {
             if (this.chartType === 'bar') {
                 this.options.series.bars.barWidth = this.subscription.timeWindow.interval * 0.6;
             }
@@ -367,10 +480,39 @@ export default class TbFlot {
                     ? this.subscription.data[i].data[0][1] : 0;
             }
             this.pieDataRendered();
-            this.ctx.plot = $.plot(this.$element, this.pieData, this.options);
-        } else {
-            this.ctx.plot = $.plot(this.$element, this.subscription.data, this.options);
         }
+        this.ctx.plotInited = true;
+        this.createPlot();
+    }
+
+    createYAxis(keySettings, units) {
+        var yaxis = angular.copy(this.yaxis);
+
+        var label = keySettings.axisTitle && keySettings.axisTitle.length ? keySettings.axisTitle : yaxis.label;
+        var tickDecimals = angular.isDefined(keySettings.axisTickDecimals) ? keySettings.axisTickDecimals : 0;
+        var position = keySettings.axisPosition && keySettings.axisPosition.length ? keySettings.axisPosition : "left";
+
+        var min = angular.isDefined(keySettings.axisMin) ? keySettings.axisMin : yaxis.min;
+        var max = angular.isDefined(keySettings.axisMax) ? keySettings.axisMax : yaxis.max;
+
+        yaxis.label = label;
+        yaxis.min = min;
+        yaxis.max = max;
+        yaxis.tickUnits = units;
+        yaxis.tickDecimals = tickDecimals;
+        yaxis.alignTicksWithAxis = position == "right" ? 1 : null;
+        yaxis.position = position;
+
+        yaxis.keysInfo = [];
+
+        if (keySettings.axisTicksFormatter && keySettings.axisTicksFormatter.length) {
+            try {
+                yaxis.ticksFormatterFunction = new Function('value', keySettings.axisTicksFormatter);
+            } catch (e) {
+                yaxis.ticksFormatterFunction = this.yaxis.ticksFormatterFunction;
+            }
+        }
+        return yaxis;
     }
 
     update() {
@@ -380,24 +522,68 @@ export default class TbFlot {
         }
         if (this.subscription) {
             if (!this.isMouseInteraction && this.ctx.plot) {
-                if (this.chartType === 'line' || this.chartType === 'bar') {
+                if (this.chartType === 'line' || this.chartType === 'bar' || this.chartType === 'state') {
+
+                    var axisVisibilityChanged = false;
+                    if (this.yaxis) {
+                        for (var i = 0; i < this.subscription.data.length; i++) {
+                            var series = this.subscription.data[i];
+                            var yaxisIndex = series.yaxisIndex;
+                            if (this.yaxes[yaxisIndex].keysInfo[i].hidden != series.dataKey.hidden) {
+                                this.yaxes[yaxisIndex].keysInfo[i].hidden = series.dataKey.hidden;
+                                axisVisibilityChanged = true;
+                            }
+                        }
+                        if (axisVisibilityChanged) {
+                            this.options.yaxes.length = 0;
+                            for (var y = 0; y < this.yaxes.length; y++) {
+                                var yaxis = this.yaxes[y];
+                                var hidden = true;
+                                for (var k = 0; k < yaxis.keysInfo.length; k++) {
+                                    if (yaxis.keysInfo[k]) {
+                                        hidden = hidden && yaxis.keysInfo[k].hidden;
+                                    }
+                                }
+                                yaxis.hidden = hidden;
+                                var newIndex = -1;
+                                if (!yaxis.hidden) {
+                                    this.options.yaxes.push(yaxis);
+                                    newIndex = this.options.yaxes.length;
+                                }
+                                for (k = 0; k < yaxis.keysInfo.length; k++) {
+                                    if (yaxis.keysInfo[k]) {
+                                        this.subscription.data[k].yaxis = newIndex;
+                                    }
+                                }
+
+                            }
+                            this.options.yaxis = {
+                                show: this.options.yaxes.length ? true : false
+                            };
+                        }
+                    }
+
                     this.options.xaxis.min = this.subscription.timeWindow.minTime;
                     this.options.xaxis.max = this.subscription.timeWindow.maxTime;
-                    this.ctx.plot.getOptions().xaxes[0].min = this.subscription.timeWindow.minTime;
-                    this.ctx.plot.getOptions().xaxes[0].max = this.subscription.timeWindow.maxTime;
                     if (this.chartType === 'bar') {
                         this.options.series.bars.barWidth = this.subscription.timeWindow.interval * 0.6;
-                        this.ctx.plot.getOptions().series.bars.barWidth = this.subscription.timeWindow.interval * 0.6;
                     }
-                    this.ctx.plot.setData(this.subscription.data);
-                    this.ctx.plot.setupGrid();
-                    this.ctx.plot.draw();
+
+                    if (axisVisibilityChanged) {
+                        this.redrawPlot();
+                    } else {
+                        this.ctx.plot.getOptions().xaxes[0].min = this.subscription.timeWindow.minTime;
+                        this.ctx.plot.getOptions().xaxes[0].max = this.subscription.timeWindow.maxTime;
+                        if (this.chartType === 'bar') {
+                            this.ctx.plot.getOptions().series.bars.barWidth = this.subscription.timeWindow.interval * 0.6;
+                        }
+                        this.updateData();
+                    }
                 } else if (this.chartType === 'pie') {
                     if (this.ctx.animatedPie) {
                         this.nextPieDataAnimation(true);
                     } else {
-                        this.ctx.plot.setData(this.subscription.data);
-                        this.ctx.plot.draw();
+                        this.updateData();
                     }
                 }
             } else if (this.isMouseInteraction && this.ctx.plot){
@@ -409,13 +595,105 @@ export default class TbFlot {
         }
     }
 
+    updateData() {
+        this.ctx.plot.setData(this.subscription.data);
+        if (this.chartType !== 'pie') {
+            this.ctx.plot.setupGrid();
+        }
+        this.ctx.plot.draw();
+    }
+
     resize() {
-        if (this.ctx.plot) {
-            this.ctx.plot.resize();
-            if (this.chartType !== 'pie') {
-                this.ctx.plot.setupGrid();
+        if (this.resizeTimeoutHandle) {
+            this.ctx.$scope.$timeout.cancel(this.resizeTimeoutHandle);
+            this.resizeTimeoutHandle = null;
+        }
+        if (this.ctx.plot && this.ctx.plotInited) {
+            var width = this.$element.width();
+            var height = this.$element.height();
+            if (width && height) {
+                this.ctx.plot.resize();
+                if (this.chartType !== 'pie') {
+                    this.ctx.plot.setupGrid();
+                }
+                this.ctx.plot.draw();
+            } else {
+                var tbFlot = this;
+                this.resizeTimeoutHandle = this.ctx.$scope.$timeout(function() {
+                    tbFlot.resize();
+                }, 30, false);
             }
-            this.ctx.plot.draw();
+        }
+    }
+
+
+    redrawPlot() {
+        if (this.ctx.plot && this.ctx.plotInited) {
+            this.ctx.plot.destroy();
+            this.ctx.plot = null;
+            this.createPlot();
+        }
+    }
+
+    createPlot() {
+        if (this.createPlotTimeoutHandle) {
+            this.ctx.$scope.$timeout.cancel(this.createPlotTimeoutHandle);
+            this.createPlotTimeoutHandle = null;
+        }
+        if (this.ctx.plotInited && !this.ctx.plot) {
+            var width = this.$element.width();
+            var height = this.$element.height();
+            if (width && height) {
+                if (this.chartType === 'pie' && this.ctx.animatedPie) {
+                    this.ctx.plot = $.plot(this.$element, this.pieData, this.options);
+                } else {
+                    this.ctx.plot = $.plot(this.$element, this.subscription.data, this.options);
+                }
+            } else {
+                var tbFlot = this;
+                this.createPlotTimeoutHandle = this.ctx.$scope.$timeout(function() {
+                    tbFlot.createPlot();
+                }, 30, false);
+            }
+        }
+    }
+
+    destroy() {
+        this.cleanup();
+        if (this.ctx.plot) {
+            this.ctx.plot.destroy();
+            this.ctx.plot = null;
+            this.ctx.plotInited = false;
+        }
+    }
+
+    cleanup() {
+        if (this.updateTimeoutHandle) {
+            this.ctx.$scope.$timeout.cancel(this.updateTimeoutHandle);
+            this.updateTimeoutHandle = null;
+        }
+        if (this.createPlotTimeoutHandle) {
+            this.ctx.$scope.$timeout.cancel(this.createPlotTimeoutHandle);
+            this.createPlotTimeoutHandle = null;
+        }
+        if (this.resizeTimeoutHandle) {
+            this.ctx.$scope.$timeout.cancel(this.resizeTimeoutHandle);
+            this.resizeTimeoutHandle = null;
+        }
+    }
+
+    checkMouseEvents() {
+        var enabled = !this.ctx.isMobile &&  !this.ctx.isEdit;
+        if (angular.isUndefined(this.mouseEventsEnabled) || this.mouseEventsEnabled != enabled) {
+            this.mouseEventsEnabled = enabled;
+            if (this.$element) {
+                if (enabled) {
+                    this.enableMouseEvents();
+                } else {
+                    this.disableMouseEvents();
+                }
+                this.redrawPlot();
+            }
         }
     }
 
@@ -545,6 +823,11 @@ export default class TbFlot {
                         "type": "boolean",
                         "default": false
                     },
+                    "tooltipValueFormatter": {
+                        "title": "Tooltip value format function, f(value)",
+                        "type": "string",
+                        "default": ""
+                    },
                     "grid": {
                         "title": "Grid settings",
                         "type": "object",
@@ -611,6 +894,16 @@ export default class TbFlot {
                         "title": "Y axis settings",
                         "type": "object",
                         "properties": {
+                            "min": {
+                                "title": "Minimum value on the scale",
+                                "type": "number",
+                                "default": null
+                            },
+                            "max": {
+                                "title": "Maximum value on the scale",
+                                "type": "number",
+                                "default": null
+                            },
                             "showLabels": {
                                 "title": "Show labels",
                                 "type": "boolean",
@@ -630,6 +923,11 @@ export default class TbFlot {
                                 "title": "Ticks color",
                                 "type": "string",
                                 "default": null
+                            },
+                            "ticksFormatter": {
+                                "title": "Ticks formatter function, f(value)",
+                                "type": "string",
+                                "default": ""
                             }
                         }
                     }
@@ -647,6 +945,10 @@ export default class TbFlot {
                 "fontSize",
                 "tooltipIndividual",
                 "tooltipCumulative",
+                {
+                    "key": "tooltipValueFormatter",
+                    "type": "javascript"
+                },
                 {
                     "key": "grid",
                     "items": [
@@ -682,12 +984,18 @@ export default class TbFlot {
                 {
                     "key": "yaxis",
                     "items": [
+                        "yaxis.min",
+                        "yaxis.max",
                         "yaxis.showLabels",
                         "yaxis.title",
                         "yaxis.titleAngle",
                         {
                             "key": "yaxis.color",
                             "type": "color"
+                        },
+                        {
+                            "key": "yaxis.ticksFormatter",
+                            "type": "javascript"
                         }
                     ]
                 }
@@ -720,6 +1028,46 @@ export default class TbFlot {
                         "title": "Show points",
                             "type": "boolean",
                             "default": false
+                    },
+                    "tooltipValueFormatter": {
+                        "title": "Tooltip value format function, f(value)",
+                        "type": "string",
+                        "default": ""
+                    },
+                    "showSeparateAxis": {
+                        "title": "Show separate axis",
+                        "type": "boolean",
+                        "default": false
+                    },
+                    "axisMin": {
+                        "title": "Minimum value on the axis scale",
+                        "type": "number",
+                        "default": null
+                    },
+                    "axisMax": {
+                        "title": "Maximum value on the axis scale",
+                        "type": "number",
+                        "default": null
+                    },
+                    "axisTitle": {
+                        "title": "Axis title",
+                        "type": "string",
+                        "default": ""
+                    },
+                    "axisTickDecimals": {
+                        "title": "Axis tick number of digits after floating point",
+                        "type": "number",
+                        "default": 0
+                    },
+                    "axisPosition": {
+                        "title": "Axis position",
+                        "type": "string",
+                        "default": "left"
+                    },
+                    "axisTicksFormatter": {
+                        "title": "Ticks formatter function, f(value)",
+                        "type": "string",
+                        "default": ""
                     }
                 },
                 "required": ["showLines", "fillLines", "showPoints"]
@@ -727,37 +1075,36 @@ export default class TbFlot {
                 "form": [
                 "showLines",
                 "fillLines",
-                "showPoints"
+                "showPoints",
+                {
+                    "key": "tooltipValueFormatter",
+                    "type": "javascript"
+                },
+                "showSeparateAxis",
+                "axisMin",
+                "axisMax",
+                "axisTitle",
+                "axisTickDecimals",
+                {
+                    "key": "axisPosition",
+                    "type": "rc-select",
+                    "multiple": false,
+                    "items": [
+                        {
+                            "value": "left",
+                            "label": "Left"
+                        },
+                        {
+                            "value": "right",
+                            "label": "Right"
+                        }
+                    ]
+                },
+                {
+                    "key": "axisTicksFormatter",
+                    "type": "javascript"
+                }
             ]
-        }
-    }
-
-    checkMouseEvents() {
-        var enabled = !this.ctx.isMobile &&  !this.ctx.isEdit;
-        if (angular.isUndefined(this.mouseEventsEnabled) || this.mouseEventsEnabled != enabled) {
-            this.mouseEventsEnabled = enabled;
-            if (this.$element) {
-                if (enabled) {
-                    this.enableMouseEvents();
-                } else {
-                    this.disableMouseEvents();
-                }
-                if (this.ctx.plot) {
-                    this.ctx.plot.destroy();
-                    if (this.chartType === 'pie' && this.ctx.animatedPie) {
-                        this.ctx.plot = $.plot(this.$element, this.pieData, this.options);
-                    } else {
-                        this.ctx.plot = $.plot(this.$element, this.subscription.data, this.options);
-                    }
-                }
-            }
-        }
-    }
-
-    destroy() {
-        if (this.ctx.plot) {
-            this.ctx.plot.destroy();
-            this.ctx.plot = null;
         }
     }
 
@@ -770,6 +1117,9 @@ export default class TbFlot {
 
         if (!this.flotHoverHandler) {
             this.flotHoverHandler =  function (event, pos, item) {
+                if (!tbFlot.ctx.plot) {
+                    return;
+                }
                 if (!tbFlot.ctx.tooltipIndividual || item) {
 
                     var multipleModeTooltip = !tbFlot.ctx.tooltipIndividual;
@@ -829,6 +1179,9 @@ export default class TbFlot {
 
         if (!this.flotSelectHandler) {
             this.flotSelectHandler =  function (event, ranges) {
+                if (!tbFlot.ctx.plot) {
+                    return;
+                }
                 tbFlot.ctx.plot.clearSelection();
                 tbFlot.subscription.onUpdateTimewindow(ranges.xaxis.from, ranges.xaxis.to);
             };
@@ -854,6 +1207,9 @@ export default class TbFlot {
         }
         if (!this.mouseleaveHandler) {
             this.mouseleaveHandler =  function () {
+                if (!tbFlot.ctx.plot) {
+                    return;
+                }
                 tbFlot.ctx.tooltip.stop(true);
                 tbFlot.ctx.tooltip.hide();
                 tbFlot.ctx.plot.unhighlight();
@@ -968,6 +1324,9 @@ export default class TbFlot {
                     hoverIndex: hoverIndex,
                     color: series.dataKey.color,
                     label: series.dataKey.label,
+                    units: series.dataKey.units,
+                    decimals: series.dataKey.decimals,
+                    tooltipValueFormatFunction: series.dataKey.tooltipValueFormatFunction,
                     time: pointTime,
                     distance: hoverDistance,
                     index: i

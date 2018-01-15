@@ -3,6 +3,10 @@
     "title": "REST API Call Plugin Configuration",
     "type": "object",
     "properties": {
+      "protocol": {
+        "title": "URI Scheme name",
+        "type": "string"
+      },
       "host": {
         "title": "Host",
         "type": "string"
@@ -30,9 +34,28 @@
       "password": {
         "title": "Password",
         "type": "string"
+      },
+      "headers": {
+        "title": "Request Headers",
+        "type": "array",
+        "items": {
+          "title": "Request Header",
+          "type": "object",
+          "properties": {
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "value": {
+              "title": "Value",
+              "type": "string"
+            }
+          }
+        }
       }
     },
     "required": [
+      "protocol",
       "host",
       "port",
       "basePath",
@@ -40,6 +63,21 @@
     ]
   },
   "form": [
+    {
+      "key": "protocol",
+      "type": "rc-select",
+      "multiple": false,
+      "items": [
+        {
+          "value": "http://",
+          "label": "HTTP"
+        },
+        {
+          "value": "https://",
+          "label": "HTTPS"
+        }
+      ]
+    },
     "host",
     "port",
     "basePath",
@@ -62,6 +100,7 @@
     {
       "key": "password",
       "type": "password"
-    }
+    },
+    "headers"
   ]
 }
